@@ -148,12 +148,13 @@ export function review(root, id, accepted, notes = '') {
 
 const requestTypes = new Set(['package', 'tool', 'documentation', 'interface', 'fixture', 'network', 'subtask', 'other']);
 const requestStatuses = new Set(['approved', 'rejected', 'needs_clarification', 'provisioned']);
-export function requestDependency(root, id, spec) {
+export function requestDependency(root, id, spec, leaseOwner = undefined) {
   const p = paths(root);
   return withMapLock(p, () => {
     const map = readJson(mapFile(p));
     const task = map.tasks.find(t => t.id === taskId(id));
     if (!task || !['pending', 'blocked', 'assigned'].includes(task.status)) throw new Error('Task not accepting requests');
+    if (task.status === 'assigned' && (task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) throw new Error('Worker lease required');
     if (!spec || !requestTypes.has(spec.type) || typeof spec.name !== 'string' || !spec.name.trim() ||
         typeof spec.reason !== 'string' || !spec.reason.trim()) throw new Error('Invalid dependency request');
     const request = {
