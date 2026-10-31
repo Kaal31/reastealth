@@ -4,6 +4,7 @@
 import { createInterface } from 'node:readline';
 import { claimTask, renewTask, releaseTask, recoverExpired, makeWorkerIdentity } from './coordination.mjs';
 import fs from 'node:fs';
+import { provisionTextResource, inspectDeliverables, importDeliverables } from './artifacts.mjs';
 import path from 'node:path';
 import { init, add, list, ready, submit, review, workerRead, workerWrite, requestDependency, listDependencyRequests, resolveDependencyRequest, pendingEvents, acknowledgeEvent } from './workspace.mjs';
 
@@ -28,6 +29,9 @@ const tools = {
     ['recover_expired', 'Return expired worker assignments to the queue', { type: 'object', properties: {} }, () => recoverExpired(root)],
     ['pending_events', 'Read durable worker submission events', { type: 'object', properties: {} }, () => pendingEvents(root)],
     ['acknowledge_event', 'Acknowledge a processed submission event', { type: 'object', properties: { id: str }, required: ['id'] }, a => acknowledgeEvent(root, a.id)],
+    ['provision_text_resource', 'Copy approved text into only the requesting worker project', { type:'object', properties:{ requestId:str, name:str, content:str }, required:['requestId','name','content'] }, a => provisionTextResource(root,a.requestId,a.name,a.content)],
+    ['inspect_deliverables', 'Review content hashes and paths before accepting outputs', { type:'object', properties:{ id:str }, required:['id'] }, a => inspectDeliverables(root,a.id)],
+    ['import_deliverables', 'Import accepted worker outputs into separate integration staging folder', { type:'object', properties:{ id:str }, required:['id'] }, a => importDeliverables(root,a.id)],
     ['list_tasks', 'Show all tasks and statuses', { type: 'object', properties: {} }, () => list(root)],
     ['ready_tasks', 'Show tasks whose dependencies are accepted', { type: 'object', properties: {} }, () => ready(root)],
     ['create_task', 'Create an isolated project task', { type: 'object', properties: { id: str, title: str, instructions: str, dependencies: { type: 'array', items: str }, acceptance: { type: 'array', items: str } }, required: ['id', 'title', 'instructions'] }, a => ({ directory: add(root, a) })],
