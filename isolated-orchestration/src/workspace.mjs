@@ -104,7 +104,7 @@ export function ready(root) {
   const map = readJson(mapFile(paths(root)));
   const tasks = map.tasks;
   const accepted = new Set(tasks.filter(x => x.status === 'accepted').map(x => x.id));
-  return tasks.filter(x => x.status === 'pending' && x.dependencies.every(id => accepted.has(id)));
+  return tasks.filter(x => x.status === 'pending' && x.dependencies.every(id => accepted.has(id)) && !(map.dependencyRequests ?? []).some(r => r.taskId === x.id && r.required && r.status !== 'provisioned'));
 }
 export function add(root, spec) {
   const p = paths(root), id = taskId(spec.id);
@@ -157,6 +157,8 @@ export function submit(root, id, summary = '', leaseOwner = undefined) {
   const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
   if (!task || !['pending', 'assigned'].includes(task.status) || (task.status === 'assigned' && (!leaseOwner || task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) || (map.dependencyRequests ?? []).some(r => r.taskId === id && r.required && r.status !== 'provisioned') || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
   task.status = 'submitted';
+  delete task.lease;
+  delete task.previousStatus;
   const submittedAt = new Date().toISOString();
   writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt });
   map.events ??= [];
@@ -185,7 +187,7 @@ export function requestDependency(root, id, spec, leaseOwner = undefined) {
     const map = readJson(mapFile(p));
     const task = map.tasks.find(t => t.id === taskId(id));
     if (!task || !['pending', 'blocked', 'assigned'].includes(task.status)) throw new Error('Task not accepting requests');
-    if (task.status === 'assigned' && (task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) throw new Error('Worker lease required');
+    if ((task.status === 'assigned' || (task.status === 'blocked' && task.lease)) && (task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) throw new Error('Worker lease required');
     if (!spec || !requestTypes.has(spec.type) || typeof spec.name !== 'string' || !spec.name.trim() ||
         typeof spec.reason !== 'string' || !spec.reason.trim()) throw new Error('Invalid dependency request');
     const request = {
@@ -195,7 +197,7 @@ export function requestDependency(root, id, spec, leaseOwner = undefined) {
     };
     map.dependencyRequests ??= [];
     map.dependencyRequests.push(request);
-    if (request.required) { task.previousStatus = task.status; task.status = 'blocked'; }
+    if (request.required) { if (task.status !== 'blocked') task.previousStatus = task.status; task.status = 'blocked'; }
     writeJson(mapFile(p), map);
     return request;
   });
