@@ -4,7 +4,7 @@
 import { createInterface } from 'node:readline';
 import fs from 'node:fs';
 import path from 'node:path';
-import { init, add, list, ready, submit, review, workerRead, workerWrite } from './workspace.mjs';
+import { init, add, list, ready, submit, review, workerRead, workerWrite, requestDependency, listDependencyRequests, resolveDependencyRequest } from './workspace.mjs';
 
 const args = process.argv.slice(2);
 const option = key => { const i = args.indexOf('--' + key); return i >= 0 ? args[i + 1] : undefined; };
@@ -27,11 +27,15 @@ const tools = {
     ['ready_tasks', 'Show tasks whose dependencies are accepted', { type: 'object', properties: {} }, () => ready(root)],
     ['create_task', 'Create an isolated project task', { type: 'object', properties: { id: str, title: str, instructions: str, dependencies: { type: 'array', items: str }, acceptance: { type: 'array', items: str } }, required: ['id', 'title', 'instructions'] }, a => ({ directory: add(root, a) })],
     ['review_task', 'Accept or reject submitted work', { type: 'object', properties: { id: str, accepted: { type: 'boolean' }, notes: str }, required: ['id', 'accepted'] }, a => review(root, a.id, a.accepted, a.notes)],
+    ['list_dependency_requests', 'Review dependency requests across worker projects', { type: 'object', properties: {} }, () => listDependencyRequests(root)],
+    ['resolve_dependency_request', 'Approve, reject, ask clarification or mark an approved dependency provisioned', { type: 'object', properties: { requestId: str, status: { type: 'string', enum: ['approved','rejected','needs_clarification','provisioned'] }, response: str }, required: ['requestId', 'status'] }, a => resolveDependencyRequest(root, a.requestId, a.status, a.response)],
     ['read_result', 'Read a worker submission summary (not the whole project)', { type: 'object', properties: { id: str }, required: ['id'] }, a => { if (!list(root).some(t => t.id === a.id)) throw Error('Unknown task'); return JSON.parse(fs.readFileSync(path.join(path.resolve(root), 'results', a.id + '.json'), 'utf8')); }]
   ],
   worker: [
     ['get_task', 'Get only your assigned task instructions', { type: 'object', properties: {} }, () => ({ task: workerRead(root, task, 'TASK.md') })],
     ['submit_result', 'Submit your own project for review', { type: 'object', properties: { summary: str }, required: ['summary'] }, a => submit(root, task, a.summary)],
+    ['request_dependency', 'Request an external package, tool, contract, fixture, network permission or subtask; required requests block submission', { type: 'object', properties: { type: { type: 'string', enum: ['package','tool','documentation','interface','fixture','network','subtask','other'] }, name: str, reason: str, required: { type: 'boolean' } }, required: ['type','name','reason'] }, a => requestDependency(root, task, a)],
+    ['get_request_status', 'View only dependency requests belonging to your assigned project', { type: 'object', properties: {} }, () => listDependencyRequests(root, task)],
     ['report_blocker', 'Report an obstacle for your task', { type: 'object', properties: { message: str }, required: ['message'] }, a => { const folder = path.join(path.resolve(root), 'workers', task, 'deliverables'); fs.mkdirSync(folder, { recursive: true }); workerWrite(root, task, 'deliverables/BLOCKER.md', a.message + '\n'); return { recorded: true }; }]
   ]
 };
