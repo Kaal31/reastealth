@@ -24,7 +24,11 @@ export function provisionTextResource(root, requestId, name, content) {
    current.status='provisioned'; current.response='resources/' + name;
    current.sha256=digest; current.updatedAt=new Date().toISOString();
    const task=map.tasks.find(t => t.id === current.taskId);
-   if (task?.status === 'blocked' && !(map.dependencyRequests ?? []).some(r => r.taskId === task.id && r.required && r.status !== 'provisioned')) task.status='pending';
+   if (task?.status === 'blocked' && !(map.dependencyRequests ?? []).some(r => r.taskId === task.id && r.required && r.status !== 'provisioned')) {
+     task.status=task.previousStatus === 'assigned' && task.lease && Date.parse(task.lease.expiresAt) > Date.now() ? 'assigned' : 'pending';
+     delete task.previousStatus;
+     if (task.status !== 'assigned') delete task.lease;
+   }
    return { path:'resources/'+name, sha256:digest, taskId:req.taskId };
  });
 }
