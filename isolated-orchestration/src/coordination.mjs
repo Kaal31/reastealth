@@ -22,8 +22,6 @@ export function claimTask(root, id, owner, ttl = 120_000) {
    }
    if (['assigned','blocked'].includes(task.status) && task.lease && Date.parse(task.lease.expiresAt) <= now) {
      if (task.status === 'blocked' && !eligible(map, task)) {
-       delete task.lease;
-       delete task.previousStatus;
        throw Error('Task blocked by unresolved dependency');
      }
      task.status = 'pending'; delete task.lease; delete task.previousStatus;
