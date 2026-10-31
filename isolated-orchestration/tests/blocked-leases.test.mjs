@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { init, add, list, submit, requestDependency, resolveDependencyRequest } from '../src/workspace.mjs';
-import { claimTask, renewTask, releaseTask } from '../src/coordination.mjs';
+import { claimTask, renewTask, releaseTask, recoverExpired } from '../src/coordination.mjs';
 import { provisionTextResource } from '../src/artifacts.mjs';
 
 function workspace() {
@@ -51,4 +51,30 @@ test('blocked claimed worker prevents competing requests and keeps owner across 
  resolveDependencyRequest(root,two.id,'provisioned','done');
  assert.equal(list(root)[0].status,'assigned');
  assert.equal(list(root)[0].lease.owner,'worker-A');
+});
+
+test('release while blocked preserves unresolved dependency and prevents another claim', () => {
+ const root=workspace();
+ claimTask(root,'parser','worker-A');
+ const req=requestDependency(root,'parser',{type:'package',name:'dep',reason:'Needed'},'worker-A');
+ assert.equal(releaseTask(root,'parser','worker-A').status,'blocked');
+ assert.throws(()=>claimTask(root,'parser','worker-B'),/not available/);
+ resolveDependencyRequest(root,req.id,'approved','ok');
+ resolveDependencyRequest(root,req.id,'provisioned','staged');
+ assert.equal(claimTask(root,'parser','worker-B').owner,'worker-B');
+});
+test('expiry recovery preserves unresolved dependency and recovers after provisioning', () => {
+ const root=workspace();
+ claimTask(root,'parser','worker-A');
+ const req=requestDependency(root,'parser',{type:'package',name:'dep',reason:'Needed'},'worker-A');
+ const mapFile=path.join(root,'control','task-map.json');
+ const map=JSON.parse(fs.readFileSync(mapFile,'utf8'));
+ map.tasks[0].lease.expiresAt='2000-01-01T00:00:00.000Z';
+ fs.writeFileSync(mapFile,JSON.stringify(map));
+ assert.deepEqual(recoverExpired(root),['parser']);
+ assert.equal(list(root)[0].status,'blocked');
+ assert.throws(()=>claimTask(root,'parser','worker-B'));
+ resolveDependencyRequest(root,req.id,'approved','ok');
+ resolveDependencyRequest(root,req.id,'provisioned','done');
+ assert.equal(claimTask(root,'parser','worker-B').owner,'worker-B');
 });
