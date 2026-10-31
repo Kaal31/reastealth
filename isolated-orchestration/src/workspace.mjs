@@ -51,7 +51,8 @@ export function init(root) {
 }
 export function list(root) { return readJson(mapFile(paths(root))).tasks; }
 export function ready(root) {
-  const tasks = list(root);
+  const map = readJson(mapFile(paths(root)));
+  const tasks = map.tasks;
   const accepted = new Set(tasks.filter(x => x.status === 'accepted').map(x => x.id));
   return tasks.filter(x => x.status === 'pending' && x.dependencies.every(id => accepted.has(id)));
 }
