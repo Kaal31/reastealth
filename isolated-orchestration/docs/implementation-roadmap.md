@@ -1,25 +1,40 @@
-# Implementation roadmap and current state
+# Isolated orchestration implementation status
 
-## Implemented on isolated-orchestration
-- File-based task map, dependency DAG, independent worker directories.
-- One role-aware local stdio MCP entry point (master and task-bound worker modes).
-- Worker dependency requests, master review, explicit provisioning state.
-- Concurrent-registry directory lock and CI stress test (not yet proven crash-safe).
-- Result submission watcher (not yet wired to desktop wake-up).
-- Per-task Claude Code project generation: `.mcp.json`, `.claude/settings.json`, `CLAUDE.md`.
+## Newly implemented in branch
 
-## Must finish before calling this complete
-1. **Verified CI:** Execute Windows/Linux runtime tests, fix failures; add malformed request and interruption tests.
-2. **Reliable registry:** Crash-safe lock recovery or transactional store; simultaneous claim and submission integrity; idempotent state transitions.
-3. **Worker assignment orchestration:** Atomically claim, lease, renew, release tasks for multiple Claude Code sessions, with guaranteed distinct assignments.
-4. **Desktop handoff:** Coordinator detects submitted work, queues durable events, and provides master-side review without assuming ChatGPT can wake itself.
-5. **MCP lifecycle:** Register role-aware MCP through REA Stealth setup, preserve upstream tool behavior, validate supported ChatGPT host and Claude Code launch paths.
-6. **Dependency provisioning:** Approval is not installation; stage approved resources into the assigned worker folder after validation; record hashes and provenance.
-7. **Integration:** Validate output files against contracts, run tests, accept/reject patch; don't automatically merge unrelated files.
-8. **Isolation enforcement:** Independent Windows accounts and NTFS ACLs; tool-process network controls; validate against symlink/junction escape, inherited global settings, and other filesystem tools.
-9. **Cleanup/recovery:** Restore workflow state after worker crashes, remove expired workspaces safely, reconcile duplicate notifications.
+1. **Worker coordination:** `coordination.mjs` provides atomic exclusive task claim, renewal, release, and expiry reconciliation. MCP worker sessions get private process identities; `get_task` claims a lease. Dead-owner registry locks are conservatively reclaimed.
+2. **Desktop handoff:** `workspace.mjs` records durable submission events; master tools `pending_events` and `acknowledge_event` support restart-safe review.
+3. **Dependency provisioning:** `artifacts.mjs` stages explicitly approved UTF-8 text resources into the requesting worker's `resources/`, with SHA-256. Package installation/network fetching remains intentionally manual.
+4. **Integration staging:** `inspect_deliverables` inventories submitted files and their hashes; `import_deliverables` copies accepted work into separate staging folders, refusing symlinks and duplicates.
+5. **Local setup:** New workspaces generate `control/master-mcp.json`, and each Claude Code task gets `.mcp.json`, `CLAUDE.md`, and local settings. Standalone REA Stealth orchestration entry points work independently of compiled REA CLI.
 
-## Claude Code scope caveats
-Project-scoped MCP and `.claude/settings.json` reduce accidental context mixing, but global/user MCP registrations and parent/user instructions may still be present. Separate terminal sessions alone do not create an operating-system security boundary. Use a fresh process per assignment and avoid placing task directories under the master source repository.
+## Still incomplete / not verified
 
-Only mark tests as passing after executing them against the committed branch.
+- All newly committed code needs **real Node runtime tests on Windows and Linux**. Source syntax checks passed; a green GitHub Actions run has not been verified.
+- No automatic ChatGPT UI wake-up, and no worker GUI automation. Orchestrator must call `pending_events` in an active session.
+- Task claiming is bound to a process session, but worker-slot registry and automated assignment selection remain future work. Each worker currently points to a specific task through its project-scoped MCP config.
+- Provisioning supports explicit text files only, not automatic npm/pip installation or fetched binaries.
+- Integration stages files, but does **not** execute untrusted worker tests or merge automatically into the master codebase.
+- Main REA `setup` routing has not been modified. A proposed root CLI registration attempt was not accepted, so the standalone script remains the supported entry.
+- Windows NTFS isolation, separate identities, and process network isolation are **not enforced**. The earlier decision to postpone mandatory NTFS enforcement remains in effect.
+
+## QA
+
+CI workflow: `.github/workflows/isolated-orchestration-tests.yml`.
+Tests cover dependency graph, MCP role boundary, worker handoff, file watcher, concurrency, dependency requests, worker configuration, leases, resource staging, and durable events. These are tests *committed*, not results *verified*.
+
+To run locally:
+
+```powershell
+cd C:\REA\reastealth\isolated-orchestration
+npm test
+```
+
+To launch a scoped worker after creating its task:
+
+```powershell
+cd C:\REA\test-project\workers\parser
+claude
+```
+
+The local MCP connection can be checked with Claude Code's `/mcp` command.
