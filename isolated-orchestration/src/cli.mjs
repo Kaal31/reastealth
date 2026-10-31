@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import { init, add, list, ready, submit, review, workerRead, workerWrite } from './workspace.mjs';
+import { claimTask, releaseTask, renewTask, recoverExpired } from './coordination.mjs';
+import { provisionTextResource, inspectDeliverables, importDeliverables } from './artifacts.mjs';
+import { init, add, list, ready, submit, review, workerRead, workerWrite, pendingEvents, acknowledgeEvent, listDependencyRequests, resolveDependencyRequest } from './workspace.mjs';
 
 const [command, root, ...args] = process.argv.slice(2);
 const out = value => console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
@@ -13,6 +15,17 @@ try {
     case 'ready': out(ready(root)); break;
     case 'submit': out(submit(root, args[0], args.slice(1).join(' '))); break;
     case 'review': out(review(root, args[0], args[1] === 'accept', args.slice(2).join(' '))); break;
+    case 'events': out(pendingEvents(root)); break;
+    case 'ack-event': out(acknowledgeEvent(root, args[0])); break;
+    case 'requests': out(listDependencyRequests(root, args[0])); break;
+    case 'resolve-request': out(resolveDependencyRequest(root, args[0], args[1], args.slice(2).join(' '))); break;
+    case 'provision-text': out(provisionTextResource(root, args[0], args[1], fs.readFileSync(args[2], 'utf8'))); break;
+    case 'inspect': out(inspectDeliverables(root, args[0])); break;
+    case 'import': out(importDeliverables(root, args[0])); break;
+    case 'claim': out(claimTask(root, args[0], args[1])); break;
+    case 'renew': out(renewTask(root, args[0], args[1])); break;
+    case 'release': out(releaseTask(root, args[0], args[1])); break;
+    case 'recover': out(recoverExpired(root)); break;
     case 'worker-read': out(workerRead(root, args[0], args[1])); break;
     case 'worker-write': out(workerWrite(root, args[0], args[1], args.slice(2).join(' '))); break;
     default: throw new Error('Unknown command');
