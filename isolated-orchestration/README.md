@@ -89,3 +89,39 @@ outside the worker directory. Do not use this for secret isolation.
 **Limitations:** This standalone module does not yet automatically launch,
 resume or notify ChatGPT/Claude Code sessions. New source files are covered by
 CI tests, but a successful CI run has not yet been confirmed.
+
+## Launch multiple Claude Code workers (opt-in)
+
+On Windows, first install and sign in to Claude Code from a normal terminal.
+The launcher opens **separate interactive Claude Code terminal windows** for up
+to four ready tasks, each with its own working directory and project-scoped MCP
+configuration. It does not send a prompt automatically, bypass permission
+prompts, or grant filesystem/network isolation.
+
+Preview without launching:
+
+```powershell
+node src/cli.mjs launch-ready C:/Users/levmi/REA-test-project
+```
+
+Launch up to two ready workers:
+
+```powershell
+node src/cli.mjs launch-ready C:/Users/levmi/REA-test-project --max=2 --execute
+```
+
+In each new Claude Code terminal, verify its project MCP with `/mcp` and ask:
+"Use rea-worker get_task to claim this project, complete TASK.md and submit
+your work." Each process gets an exclusive lease after calling `get_task`.
+Use `renew_lease` periodically for long interactive sessions; the default
+lease expires after two minutes, and no automatic heartbeat exists yet.
+
+Master MCP tools: `plan_worker_launch` previews eligible sessions, and
+`launch_ready_workers` requires `{ "confirm": true }` to open them.
+**Repeated launch commands can create duplicate windows**; each task's MCP
+lease, not the launcher, enforces exclusive task ownership.
+
+On Linux, the launcher currently requires `x-terminal-emulator`; macOS is
+not yet supported. A Claude Code subscription or user-provided model
+authentication is still required for real model execution. These terminal
+launches do not require REA Stealth to collect or store provider credentials.
