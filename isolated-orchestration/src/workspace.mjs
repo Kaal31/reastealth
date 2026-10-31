@@ -68,7 +68,16 @@ export function init(root) {
   const p = paths(root);
   if (fs.existsSync(p.root) && fs.readdirSync(p.root).length) throw new Error('Workspace must be empty');
   for (const dir of [p.control, p.workers, p.results]) fs.mkdirSync(dir, { recursive: true });
-  writeJson(mapFile(p), { schemaVersion: 1, tasks: [] });
+  writeJson(mapFile(p), { schemaVersion: 1, tasks: [], dependencyRequests: [], events: [] });
+  writeJson(path.join(p.control, 'master-mcp.json'), {
+    mcpServers: {
+      'rea-orchestrator': {
+        type: 'stdio',
+        command: process.execPath,
+        args: [fileURLToPath(new URL('./mcp.mjs', import.meta.url)), '--role', 'master', '--workspace', p.root]
+      }
+    }
+  });
   fs.writeFileSync(path.join(p.control, 'master-plan.md'), '# Master plan\n\nOrchestrator-only context.\n');
   return p;
 }
