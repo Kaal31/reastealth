@@ -36,7 +36,7 @@ test('same MCP implementation exposes different fixed role tool lists', async ()
     const w = await worker.call('tools/list');
     assert.ok(m.result.tools.some(t => t.name === 'create_task'));
     assert.ok(!w.result.tools.some(t => t.name === 'create_task'));
-    assert.deepEqual(w.result.tools.map(t => t.name), ['get_task', 'submit_result', 'report_blocker']);
+    assert.deepEqual(w.result.tools.map(t => t.name), ['get_task', 'submit_result', 'request_dependency', 'get_request_status', 'report_blocker']);
     const denied = await worker.call('tools/call', { name: 'list_tasks', arguments: {} });
     assert.equal(denied.error.code, -32601);
     const assigned = await worker.call('tools/call', { name: 'get_task', arguments: {} });
