@@ -13,6 +13,26 @@ function writeJson(file, value) {
   fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
   fs.renameSync(temp, file);
 }
+// Synchronous cross-process lock: all task-map read/modify/write operations use it.
+// Conservative timeout avoids silently stealing a lock from a live process.
+const pause = new Int32Array(new SharedArrayBuffer(4));
+function withMapLock(p, action) {
+  const lockPath = path.join(p.control, '.task-map.lock');
+  const deadline = Date.now() + 15000;
+  let acquired = false;
+  while (!acquired) {
+    try {
+      fs.mkdirSync(lockPath);
+      acquired = true;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (Date.now() > deadline) throw new Error('Task registry busy; lock timeout: ' + lockPath);
+      Atomics.wait(pause, 0, 0, 20);
+    }
+  }
+  try { return action(); }
+  finally { fs.rmdirSync(lockPath); }
+}
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const paths = root => {
   const base = path.resolve(root);
@@ -36,7 +56,9 @@ export function ready(root) {
   return tasks.filter(x => x.status === 'pending' && x.dependencies.every(id => accepted.has(id)));
 }
 export function add(root, spec) {
-  const p = paths(root), id = taskId(spec.id), map = readJson(mapFile(p));
+  const p = paths(root), id = taskId(spec.id);
+  return withMapLock(p, () => {
+  const map = readJson(mapFile(p));
   if (map.tasks.some(t => t.id === id)) throw new Error('Duplicate task ID');
   if (typeof spec.title !== 'string' || typeof spec.instructions !== 'string') throw new Error('Title and instructions are required');
   const deps = spec.dependencies ?? [];
@@ -49,14 +71,18 @@ export function add(root, spec) {
   map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
   writeJson(mapFile(p), map);
   return dir;
+  });
 }
 export function submit(root, id, summary = '') {
-  const p = paths(root), map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
-  if (!task || task.status !== 'pending' || !ready(root).some(t => t.id === id)) throw new Error('Task not ready');
+  const p = paths(root);
+  return withMapLock(p, () => {
+  const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
+  if (!task || task.status !== 'pending' || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
   task.status = 'submitted';
   writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt: new Date().toISOString() });
   writeJson(mapFile(p), map);
   return task;
+  });
 }
 export function review(root, id, accepted, notes = '') {
   const p = paths(root), map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
@@ -65,6 +91,7 @@ export function review(root, id, accepted, notes = '') {
   writeJson(path.join(p.results, id + '-review.json'), { id, accepted: !!accepted, notes, reviewedAt: new Date().toISOString() });
   writeJson(mapFile(p), map);
   return task;
+  });
 }
 // Validates a path for bridge-mediated access. Does not restrict an untrusted desktop process.
 export function scopedPath(root, id, relative) {
