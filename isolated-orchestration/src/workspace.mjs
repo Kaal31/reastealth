@@ -95,7 +95,7 @@ export function add(root, spec) {
     'Save implementation files under deliverables/. Do not mark work complete until tests pass.',
     'Report external dependencies and missing interfaces to the orchestrator through request_dependency.',
     ''
-  ].join('\\n'));
+  ].join('\n'));
 
   map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
   writeJson(mapFile(p), map);
