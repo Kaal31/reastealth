@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests",
+    "test": "node --test",
     "start": "node src/cli.mjs",
-    "test:ci": "node --test tests"
+    "test:ci": "node --test"
   }
 }
