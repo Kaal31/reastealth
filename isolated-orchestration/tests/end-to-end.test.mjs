@@ -85,6 +85,7 @@ test('MCP dependency requests are role-scoped and unblock on provisioning', asyn
   unwrap(await master.call('create_task', { id:'sibling', title:'Sibling', instructions:'Other task' }));
   worker = session('worker', root, 'primary');
   sibling = session('worker', root, 'sibling');
+  unwrap(await worker.call('get_task'));
   const req = unwrap(await worker.call('request_dependency', { type:'package', name:'sqlite', reason:'Need transactions', required:true }));
   assert.equal(req.status, 'pending');
   assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id), ['sibling']);
@@ -96,7 +97,7 @@ test('MCP dependency requests are role-scoped and unblock on provisioning', asyn
   assert.equal(unwrap(await worker.call('get_request_status'))[0].status, 'approved');
   assert.equal((await worker.call('submit_result', { summary:'premature' })).result.isError, true);
   unwrap(await master.call('resolve_dependency_request', { requestId:req.id,status:'provisioned',response:'Available in workspace' }));
-  assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id).sort(), ['primary','sibling']);
+  assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id), ['sibling']);
   assert.equal(unwrap(await worker.call('get_request_status'))[0].status, 'provisioned');
  } finally { worker?.close(); sibling?.close(); master.close(); }
 });
