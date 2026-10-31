@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { planWorkers, startWorkers } from './launcher.mjs';
 import { claimTask, releaseTask, renewTask, recoverExpired } from './coordination.mjs';
 import { provisionTextResource, inspectDeliverables, importDeliverables } from './artifacts.mjs';
 import { init, add, list, ready, submit, review, workerRead, workerWrite, pendingEvents, acknowledgeEvent, listDependencyRequests, resolveDependencyRequest } from './workspace.mjs';
@@ -9,6 +10,13 @@ const out = value => console.log(typeof value === 'string' ? value : JSON.string
 try {
   if (!command || !root) throw new Error('Usage: node src/cli.mjs <init|add|list|ready|submit|review|worker-read|worker-write> <workspace> [...args]');
   switch (command) {
+    case 'launch-ready': {
+      const execute = args.includes('--execute');
+      const limit = args.find(x => x.startsWith('--max='));
+      const plan = planWorkers(root, limit ? Number(limit.slice(6)) : 4);
+      out(execute ? startWorkers(plan) : { dryRun: true, workers: plan, hint: 'Add --execute to launch interactive Claude Code terminals' });
+      break;
+    }
     case 'init': out(init(root)); break;
     case 'add': out(add(root, JSON.parse(fs.readFileSync(args[0], 'utf8')))); break;
     case 'list': out(list(root)); break;
