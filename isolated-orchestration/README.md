@@ -6,7 +6,7 @@ Local-first, provider-independent task orchestration. Built as an optional modul
 
 - One MCP server implementation, with `--role master` or `--role worker --task ID` startup profiles.
 - Master: creates and reviews individual task projects, reads the task graph, checks readiness.
-- Worker: receives only its assigned instructions and can submit a result or report a blocker.
+- Worker: receives only its assigned instructions, obtains an exclusive renewable lease, requests dependencies, and can submit a result or report a blocker.
 - Local filesystem stores plans, worker project files, and result manifests; no paid model API is needed.
 - Worker roles have separate advertised MCP tools; master methods are not callable through worker connections.
 
@@ -44,10 +44,18 @@ This is an **initial optional module**, not yet wired into the main `rea` CLI's 
 
 Role isolation is only enforced in this module's MCP interface and bridge-mediated file functions. It **does not prevent unrestricted file/shell tools in a desktop application from reading accessible Windows folders**. NTFS-enforced identity separation is deferred as requested. A local user capable of editing MCP launcher configuration can start the master profile.
 
-There is no automatic desktop session wake-up, UI automation, filesystem watcher, or cross-process transaction locking yet. Desktop compatibility must be verified for each actual client before activation.
+A filesystem watcher and serialized registry updates are available, but no automatic ChatGPT desktop wake-up or GUI automation is implemented. The worker lease and lock-recovery logic require runtime validation on Windows and Linux. Desktop compatibility must be verified for each actual client before activation.
 
 Existing reverse-engineering tools and upstream build behavior remain untouched.
 
 ## Local completion notifications
 
 Run `node src/watch.mjs C:/REA-workspace/project` in a persistent local terminal. It outputs JSON lines for submissions and scans existing submission records on startup. It is an optional observer: it does not automatically launch or resume AI desktop applications, and must not be treated as a security boundary. A later integration will connect these events to the desktop coordinator.
+
+## New master workflow
+
+`init` generates `control/master-mcp.json` and each task generates its own `.mcp.json` and minimal Claude Code configuration. Worker `get_task` claims a renewable lease; a second session targeting the same task cannot claim it while the lease is live. Master can call `recover_expired` after crashes. Master tools `pending_events` and `acknowledge_event` expose durable submission events.
+
+Workers can request dependencies. The orchestrator approves them and may use `provision_text_resource` to stage a UTF-8 resource in `resources/`; arbitrary package installation is not implemented. The orchestrator can call `inspect_deliverables` and, after acceptance, `import_deliverables` to copy worker outputs into an isolated integration staging area. This does not run arbitrary worker code, merge into the master repository, or validate application behavior.
+
+CI source: [isolated orchestration tests](../.github/workflows/isolated-orchestration-tests.yml). Tests are committed but no passing Actions run has been verified from this environment.
