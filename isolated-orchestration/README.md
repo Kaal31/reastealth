@@ -47,3 +47,7 @@ Role isolation is only enforced in this module's MCP interface and bridge-mediat
 There is no automatic desktop session wake-up, UI automation, filesystem watcher, or cross-process transaction locking yet. Desktop compatibility must be verified for each actual client before activation.
 
 Existing reverse-engineering tools and upstream build behavior remain untouched.
+
+## Local completion notifications
+
+Run `node src/watch.mjs C:/REA-workspace/project` in a persistent local terminal. It outputs JSON lines for submissions and scans existing submission records on startup. It is an optional observer: it does not automatically launch or resume AI desktop applications, and must not be treated as a security boundary. A later integration will connect these events to the desktop coordinator.
