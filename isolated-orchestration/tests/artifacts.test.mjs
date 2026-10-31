@@ -1,0 +1,31 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { init, add, requestDependency, resolveDependencyRequest, ready, submit, review } from '../src/workspace.mjs';
+import { provisionTextResource, inspectDeliverables, importDeliverables } from '../src/artifacts.mjs';
+const setup = () => { const root=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'rea-artifacts-')),'project'); init(root);add(root,{id:'one',title:'One',instructions:'Write source'});return root; };
+test('approved resource is confined to worker resources and unblocks task', () => {
+ const root=setup();
+ const r=requestDependency(root,'one',{type:'interface',name:'schema',reason:'required interface'});
+ assert.throws(()=>provisionTextResource(root,r.id,'schema.txt','v1'),/not approved/);
+ resolveDependencyRequest(root,r.id,'approved','approved');
+ assert.throws(()=>provisionTextResource(root,r.id,'../master.md','bad'),/Invalid file/);
+ const result=provisionTextResource(root,r.id,'schema.txt','schema-v1');
+ assert.equal(fs.readFileSync(path.join(root,'workers','one',result.path),'utf8'),'schema-v1');
+ assert.equal(ready(root).length,1);
+});
+test('outputs are inspected, acceptance-gated and copied into integration staging', () => {
+ const root=setup();
+ fs.writeFileSync(path.join(root,'workers','one','deliverables','output.txt'),'hello');
+ submit(root,'one','complete');
+ const m=inspectDeliverables(root,'one');
+ assert.equal(m.files.length,1);
+ assert.equal(m.files[0].bytes,5);
+ assert.throws(()=>importDeliverables(root,'one'),/accept/);
+ review(root,'one',true);
+ const imported=importDeliverables(root,'one');
+ assert.equal(fs.readFileSync(path.join(imported.directory,'output.txt'),'utf8'),'hello');
+ assert.throws(()=>importDeliverables(root,'one'),/Already imported/);
+});
