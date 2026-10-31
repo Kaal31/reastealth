@@ -1,44 +1,49 @@
-# REA Stealth — Isolated Orchestration (initial implementation)
+# REA Stealth — Isolated Orchestration
 
-This optional subproject runs beside the existing REA CLI and MCP code. It does not change the existing REA binary-analysis tools. It uses local filesystem task handoff and does **not** call paid model APIs.
+Local-first, provider-independent task orchestration. Built as an optional module on top of the REA Stealth repository, without changing its existing reverse-engineering tools.
 
-## Workflow
+## Architecture
 
-- Orchestrator creates a master plan and task DAG in `control/`.
-- Each worker task gets its own `workers/<task-id>/` project, with only task instructions and selected contracts.
-- Workers provide output in their own `deliverables/`; the bridge writes completion evidence to `results/`.
-- Orchestrator reviews submissions and can unlock dependent tasks.
+- One MCP server implementation, with `--role master` or `--role worker --task ID` startup profiles.
+- Master: creates and reviews individual task projects, reads the task graph, checks readiness.
+- Worker: receives only its assigned instructions and can submit a result or report a blocker.
+- Local filesystem stores plans, worker project files, and result manifests; no paid model API is needed.
+- Worker roles have separate advertised MCP tools; master methods are not callable through worker connections.
 
-## CLI
+See [desktop setup](docs/desktop-setup.md) for stdio configuration examples.
 
-From this subproject directory, with an installed compatible Node.js:
+## CLI workflow
+
+From this directory:
 
 ```sh
 node src/cli.mjs init ./demo
 node src/cli.mjs add ./demo ./example-task.json
 node src/cli.mjs ready ./demo
-node src/cli.mjs worker-write ./demo parser deliverables/result.txt hello
 node src/cli.mjs submit ./demo parser "Implemented"
 node src/cli.mjs review ./demo parser accept "Tests passed"
 npm test
 ```
 
-Example task JSON:
+Task specification example:
 
 ```json
-{"id":"parser","title":"Parser","instructions":"Build a parser for the provided test fixtures.","acceptance":["Pass parser tests"],"dependencies":[]}
+{"id":"parser","title":"Parser","instructions":"Build a parser for the provided fixtures.","acceptance":["Pass parser tests"],"dependencies":[]}
 ```
 
-## Isolation limitations
+MCP launch examples:
 
-The bridge validates relative paths and prevents ordinary cross-task reads *through its own read/write functions*. This is **not an OS security boundary**. A desktop worker with direct filesystem or shell access can still browse folders permitted to its operating-system account. For actual isolation run workers under separately restricted Windows accounts, containers, or virtual machines and expose only assigned worker directories. Do not give worker apps a separate unrestricted file or shell tool. A single shared Windows user account is insufficient.
+```sh
+node src/mcp.mjs --role master --workspace C:/REA-workspace/project
+node src/mcp.mjs --role worker --workspace C:/REA-workspace/project --task parser
+```
 
-## Planned REA integration
+## Status and caveats
 
-1. Add orchestrator-only MCP tools for creating task maps, reviewing outputs, and dependency resolution.
-2. Expose a separate worker MCP server restricted to one task ID, without orchestrator methods.
-3. Set up per-application desktop MCP configurations and local filesystem handoffs.
-4. Add sandbox provisioning and access-control tests on Windows.
-5. Add an opt-in desktop UI adapter only when native MCP task triggering is unavailable.
+This is an **initial optional module**, not yet wired into the main `rea` CLI's existing command router or REA MCP catalog. It exposes a standalone MCP stdio endpoint in the same repository.
 
-No desktop application is automatically driven in this initial version. All project purposes remain visible to the orchestrator and are subject to normal safety checks.
+Role isolation is only enforced in this module's MCP interface and bridge-mediated file functions. It **does not prevent unrestricted file/shell tools in a desktop application from reading accessible Windows folders**. NTFS-enforced identity separation is deferred as requested. A local user capable of editing MCP launcher configuration can start the master profile.
+
+There is no automatic desktop session wake-up, UI automation, filesystem watcher, or cross-process transaction locking yet. Desktop compatibility must be verified for each actual client before activation.
+
+Existing reverse-engineering tools and upstream build behavior remain untouched.
