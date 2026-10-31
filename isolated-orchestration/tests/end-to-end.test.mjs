@@ -73,3 +73,30 @@ test('simultaneous worker MCP sessions get no sibling instructions', async () =>
     assert.doesNotMatch(JSON.stringify(two), /Unique FIRST/);
   } finally { a?.close(); b?.close(); master.close(); }
 });
+
+
+test('MCP dependency requests are role-scoped and unblock on provisioning', async () => {
+ const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rea-req-mcp-')), 'workspace');
+ const master = session('master', root);
+ let worker, sibling;
+ try {
+  unwrap(await master.call('init_workspace'));
+  unwrap(await master.call('create_task', { id:'primary', title:'Primary', instructions:'Write code' }));
+  unwrap(await master.call('create_task', { id:'sibling', title:'Sibling', instructions:'Other task' }));
+  worker = session('worker', root, 'primary');
+  sibling = session('worker', root, 'sibling');
+  const req = unwrap(await worker.call('request_dependency', { type:'package', name:'sqlite', reason:'Need transactions', required:true }));
+  assert.equal(req.status, 'pending');
+  assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id), ['sibling']);
+  const denied = await worker.call('resolve_dependency_request', { requestId:req.id,status:'approved' });
+  assert.equal(denied.error.code, -32601);
+  assert.equal(unwrap(await sibling.call('get_request_status')).length, 0);
+  assert.equal(unwrap(await master.call('list_dependency_requests')).length, 1);
+  unwrap(await master.call('resolve_dependency_request', { requestId:req.id,status:'approved',response:'Validated' }));
+  assert.equal(unwrap(await worker.call('get_request_status'))[0].status, 'approved');
+  assert.equal((await worker.call('submit_result', { summary:'premature' })).result.isError, true);
+  unwrap(await master.call('resolve_dependency_request', { requestId:req.id,status:'provisioned',response:'Available in workspace' }));
+  assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id).sort(), ['primary','sibling']);
+  assert.equal(unwrap(await worker.call('get_request_status'))[0].status, 'provisioned');
+ } finally { worker?.close(); sibling?.close(); master.close(); }
+});
