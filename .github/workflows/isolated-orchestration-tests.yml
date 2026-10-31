@@ -22,4 +22,4 @@ jobs:
           node-version: "22"
       - name: Run MCP integration and access tests
         working-directory: isolated-orchestration
-        run: node --test tests/workspace.test.mjs tests/mcp.test.mjs tests/end-to-end.test.mjs tests/watch.test.mjs tests/concurrency.test.mjs tests/dependency-requests.test.mjs tests/claude-code.test.mjs tests/leases.test.mjs tests/artifacts.test.mjs tests/events.test.mjs tests/blocked-leases.test.mjs
+        run: node --test tests/workspace.test.mjs tests/mcp.test.mjs tests/end-to-end.test.mjs tests/watch.test.mjs tests/concurrency.test.mjs tests/dependency-requests.test.mjs tests/claude-code.test.mjs tests/leases.test.mjs tests/artifacts.test.mjs tests/events.test.mjs tests/blocked-leases.test.mjs tests/two-worker-handoff.test.mjs
