@@ -44,7 +44,7 @@ test('live MCP master-worker lifecycle and dependency unlocking', async () => {
     unwrap(await master.call('create_task', { id: 'alpha', title: 'Alpha', instructions: 'Implement alpha' }));
     unwrap(await master.call('create_task', { id: 'beta', title: 'Beta', instructions: 'Implement beta', dependencies: ['alpha'] }));
     worker = session('worker', root, 'alpha');
-    assert.deepEqual((await worker.request('tools/list')).result.tools.map(t => t.name), ['get_task', 'submit_result', 'report_blocker']);
+    assert.deepEqual((await worker.request('tools/list')).result.tools.map(t => t.name), ['get_task', 'submit_result', 'request_dependency', 'get_request_status', 'report_blocker']);
     assert.match(unwrap(await worker.call('get_task')).task, /Implement alpha/);
     assert.equal((await worker.call('list_tasks')).error.code, -32601);
     assert.deepEqual(unwrap(await master.call('ready_tasks')).map(t => t.id), ['alpha']);
