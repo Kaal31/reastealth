@@ -1,0 +1,25 @@
+name: Isolated Orchestration Tests
+on:
+  push:
+    branches: [isolated-orchestration]
+    paths: ["isolated-orchestration/**", ".github/workflows/isolated-orchestration-tests.yml"]
+  pull_request:
+    paths: ["isolated-orchestration/**", ".github/workflows/isolated-orchestration-tests.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  orchestration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run MCP integration and access tests
+        working-directory: isolated-orchestration
+        run: node --test tests/*.test.mjs
