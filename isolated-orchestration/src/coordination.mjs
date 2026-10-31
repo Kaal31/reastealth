@@ -15,12 +15,12 @@ export function claimTask(root, id, owner, ttl = 120_000) {
    const task = map.tasks.find(t => t.id === id);
    if (!task || !eligible(map, task)) throw Error('Task not eligible');
    const now = Date.now();
-   if (task.status === 'assigned' && task.lease && Date.parse(task.lease.expiresAt) > now) {
+   if (['assigned','blocked'].includes(task.status) && task.lease && Date.parse(task.lease.expiresAt) > now) {
      if (task.lease.owner !== owner) throw Error('Task already claimed');
      task.lease.expiresAt = expiry(now, ttl);
      return { id, owner, expiresAt: task.lease.expiresAt };
    }
-   if (task.status === 'assigned' && task.lease && Date.parse(task.lease.expiresAt) <= now) {
+   if (['assigned','blocked'].includes(task.status) && task.lease && Date.parse(task.lease.expiresAt) <= now) {
      task.status = 'pending'; delete task.lease;
    }
    if (task.status !== 'pending') throw Error('Task not available');
@@ -30,7 +30,14 @@ export function claimTask(root, id, owner, ttl = 120_000) {
  });
 }
 export function renewTask(root, id, owner, ttl = 120_000) {
- return claimTask(root, id, owner, ttl);
+ if (!validId(id) || !validId(owner)) throw Error('Invalid worker identity');
+ assertTTL(ttl);
+ return transaction(root, map => {
+   const task = map.tasks.find(t => t.id === id);
+   if (!task || !['assigned','blocked'].includes(task.status) || task.lease?.owner !== owner || Date.parse(task.lease.expiresAt) <= Date.now()) throw Error('No valid lease');
+   task.lease.expiresAt = expiry(Date.now(), ttl);
+   return { id, owner, expiresAt: task.lease.expiresAt };
+ });
 }
 export function releaseTask(root, id, owner, force = false) {
  if (!validId(id) || !validId(owner)) throw Error('Invalid identity');
@@ -46,8 +53,8 @@ export function recoverExpired(root) {
    const now = Date.now();
    const expired = [];
    for (const task of map.tasks) {
-     if (task.status === 'assigned' && task.lease && Date.parse(task.lease.expiresAt) <= now) {
-       task.status = 'pending'; delete task.lease; expired.push(task.id);
+     if (['assigned','blocked'].includes(task.status) && task.lease && Date.parse(task.lease.expiresAt) <= now) {
+       task.status = task.status === 'blocked' ? 'blocked' : 'pending'; delete task.lease; delete task.previousStatus; expired.push(task.id);
      }
    }
    return expired;
