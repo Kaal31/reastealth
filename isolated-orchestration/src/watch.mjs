@@ -3,6 +3,7 @@
 // Does not launch or wake any desktop AI application.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export function watchSubmissions(root, onSubmission) {
   const folder = path.join(path.resolve(root), 'results');
@@ -27,7 +28,7 @@ export function watchSubmissions(root, onSubmission) {
   fallback.unref();
   return () => { watcher.close(); clearInterval(fallback); };
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.argv[2];
   if (!root) { console.error('Usage: node src/watch.mjs <workspace>'); process.exit(2); }
   watchSubmissions(root, event => process.stdout.write(JSON.stringify(event) + '\n'));
