@@ -50,6 +50,15 @@ export function init(root) {
   fs.writeFileSync(path.join(p.control, 'master-plan.md'), '# Master plan\n\nOrchestrator-only context.\n');
   return p;
 }
+export function transaction(root, action) {
+  const p = paths(root);
+  return withMapLock(p, () => {
+    const map = readJson(mapFile(p));
+    const result = action(map);
+    writeJson(mapFile(p), map);
+    return result;
+  });
+}
 export function list(root) { return readJson(mapFile(paths(root))).tasks; }
 export function ready(root) {
   const map = readJson(mapFile(paths(root)));
@@ -102,11 +111,11 @@ export function add(root, spec) {
   return dir;
   });
 }
-export function submit(root, id, summary = '') {
+export function submit(root, id, summary = '', leaseOwner = undefined) {
   const p = paths(root);
   return withMapLock(p, () => {
   const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
-  if (!task || task.status !== 'pending' || (map.dependencyRequests ?? []).some(r => r.taskId === id && r.required && r.status !== 'provisioned') || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
+  if (!task || !['pending', 'assigned'].includes(task.status) || (task.status === 'assigned' && (!leaseOwner || task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) || (map.dependencyRequests ?? []).some(r => r.taskId === id && r.required && r.status !== 'provisioned') || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
   task.status = 'submitted';
   writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt: new Date().toISOString() });
   writeJson(mapFile(p), map);
@@ -132,7 +141,7 @@ export function requestDependency(root, id, spec) {
   return withMapLock(p, () => {
     const map = readJson(mapFile(p));
     const task = map.tasks.find(t => t.id === taskId(id));
-    if (!task || !['pending', 'blocked'].includes(task.status)) throw new Error('Task not accepting requests');
+    if (!task || !['pending', 'blocked', 'assigned'].includes(task.status)) throw new Error('Task not accepting requests');
     if (!spec || !requestTypes.has(spec.type) || typeof spec.name !== 'string' || !spec.name.trim() ||
         typeof spec.reason !== 'string' || !spec.reason.trim()) throw new Error('Invalid dependency request');
     const request = {
