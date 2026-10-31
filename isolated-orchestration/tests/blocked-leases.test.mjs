@@ -37,3 +37,18 @@ test('explicit provisioner restores prior assignment and records digest', () => 
  assert.equal(list(root)[0].status,'assigned');
  assert.equal(submit(root,'parser','done','worker-A').status,'submitted');
 });
+
+test('blocked claimed worker prevents competing requests and keeps owner across multiple requests', () => {
+ const root=workspace();
+ claimTask(root,'parser','worker-A');
+ const one=requestDependency(root,'parser',{type:'package',name:'libA',reason:'Need A'},'worker-A');
+ assert.throws(() => requestDependency(root,'parser',{type:'package',name:'libB',reason:'Need B'},'worker-B'), /lease required/);
+ const two=requestDependency(root,'parser',{type:'package',name:'libB',reason:'Need B'},'worker-A');
+ resolveDependencyRequest(root,one.id,'approved','ok');
+ resolveDependencyRequest(root,one.id,'provisioned','done');
+ assert.equal(list(root)[0].status,'blocked');
+ resolveDependencyRequest(root,two.id,'approved','ok');
+ resolveDependencyRequest(root,two.id,'provisioned','done');
+ assert.equal(list(root)[0].status,'assigned');
+ assert.equal(list(root)[0].lease.owner,'worker-A');
+});
