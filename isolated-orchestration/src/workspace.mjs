@@ -59,6 +59,15 @@ export function transaction(root, action) {
     return result;
   });
 }
+export function pendingEvents(root) { return (readJson(mapFile(paths(root))).events ?? []).filter(x => !x.acknowledgedAt); }
+export function acknowledgeEvent(root, id) {
+  return transaction(root, map => {
+    const event = (map.events ?? []).find(x => x.id === id);
+    if (!event) throw Error('Unknown event');
+    event.acknowledgedAt ??= new Date().toISOString();
+    return event;
+  });
+}
 export function list(root) { return readJson(mapFile(paths(root))).tasks; }
 export function ready(root) {
   const map = readJson(mapFile(paths(root)));
@@ -117,7 +126,10 @@ export function submit(root, id, summary = '', leaseOwner = undefined) {
   const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
   if (!task || !['pending', 'assigned'].includes(task.status) || (task.status === 'assigned' && (!leaseOwner || task.lease?.owner !== leaseOwner || Date.parse(task.lease.expiresAt) <= Date.now())) || (map.dependencyRequests ?? []).some(r => r.taskId === id && r.required && r.status !== 'provisioned') || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
   task.status = 'submitted';
-  writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt: new Date().toISOString() });
+  const submittedAt = new Date().toISOString();
+  writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt });
+  map.events ??= [];
+  map.events.push({ id: crypto.randomUUID(), type: 'task_submitted', taskId: id, at: submittedAt });
   writeJson(mapFile(p), map);
   return task;
   });
