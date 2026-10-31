@@ -1,0 +1,89 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+const idPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+function taskId(id) {
+  if (typeof id !== 'string' || !idPattern.test(id)) throw new Error('Invalid task ID');
+  return id;
+}
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = file + '.' + crypto.randomUUID() + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
+  fs.renameSync(temp, file);
+}
+const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const paths = root => {
+  const base = path.resolve(root);
+  return { root: base, control: path.join(base, 'control'), workers: path.join(base, 'workers'), results: path.join(base, 'results') };
+};
+const mapFile = p => path.join(p.control, 'task-map.json');
+const workerDir = (p, id) => path.join(p.workers, taskId(id));
+
+export function init(root) {
+  const p = paths(root);
+  if (fs.existsSync(p.root) && fs.readdirSync(p.root).length) throw new Error('Workspace must be empty');
+  for (const dir of [p.control, p.workers, p.results]) fs.mkdirSync(dir, { recursive: true });
+  writeJson(mapFile(p), { schemaVersion: 1, tasks: [] });
+  fs.writeFileSync(path.join(p.control, 'master-plan.md'), '# Master plan\n\nOrchestrator-only context.\n');
+  return p;
+}
+export function list(root) { return readJson(mapFile(paths(root))).tasks; }
+export function ready(root) {
+  const tasks = list(root);
+  const accepted = new Set(tasks.filter(x => x.status === 'accepted').map(x => x.id));
+  return tasks.filter(x => x.status === 'pending' && x.dependencies.every(id => accepted.has(id)));
+}
+export function add(root, spec) {
+  const p = paths(root), id = taskId(spec.id), map = readJson(mapFile(p));
+  if (map.tasks.some(t => t.id === id)) throw new Error('Duplicate task ID');
+  if (typeof spec.title !== 'string' || typeof spec.instructions !== 'string') throw new Error('Title and instructions are required');
+  const deps = spec.dependencies ?? [];
+  if (!Array.isArray(deps) || deps.some(d => !map.tasks.some(t => t.id === d))) throw new Error('Unknown dependency');
+  const dir = workerDir(p, id);
+  if (fs.existsSync(dir)) throw new Error('Task directory already exists');
+  fs.mkdirSync(path.join(dir, 'deliverables'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'TASK.md'), '# ' + spec.title + '\n\n' + spec.instructions + '\n\n## Acceptance criteria\n' + (spec.acceptance ?? []).map(x => '- ' + x).join('\n') + '\n');
+  writeJson(path.join(dir, 'task.json'), { id, title: spec.title, dependencies: deps, status: 'pending' });
+  map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
+  writeJson(mapFile(p), map);
+  return dir;
+}
+export function submit(root, id, summary = '') {
+  const p = paths(root), map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
+  if (!task || task.status !== 'pending' || !ready(root).some(t => t.id === id)) throw new Error('Task not ready');
+  task.status = 'submitted';
+  writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt: new Date().toISOString() });
+  writeJson(mapFile(p), map);
+  return task;
+}
+export function review(root, id, accepted, notes = '') {
+  const p = paths(root), map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
+  if (!task || task.status !== 'submitted') throw new Error('Task not submitted');
+  task.status = accepted ? 'accepted' : 'pending';
+  writeJson(path.join(p.results, id + '-review.json'), { id, accepted: !!accepted, notes, reviewedAt: new Date().toISOString() });
+  writeJson(mapFile(p), map);
+  return task;
+}
+// Validates a path for bridge-mediated access. Does not restrict an untrusted desktop process.
+export function scopedPath(root, id, relative) {
+  const p = paths(root), base = workerDir(p, id);
+  if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || /^[A-Za-z]:/.test(relative) || relative.split(/[\\/]/).includes('..')) throw new Error('Path outside worker scope');
+  const target = path.resolve(base, relative);
+  if (!target.startsWith(base + path.sep)) throw new Error('Path outside worker scope');
+  for (let current = target; current !== path.dirname(current); current = path.dirname(current)) {
+    if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) throw new Error('Symlink denied');
+  }
+  return target;
+}
+export function workerRead(root, id, file) { return fs.readFileSync(scopedPath(root, id, file), 'utf8'); }
+export function workerWrite(root, id, file, content) {
+  if (typeof file !== 'string' || !file.replaceAll('\\', '/').startsWith('deliverables/')) throw new Error('Workers write only under deliverables/');
+  const target = scopedPath(root, id, file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  // Revalidate after mkdir; filesystem race protection requires OS-level sandboxing.
+  scopedPath(root, id, file);
+  fs.writeFileSync(target, content, { flag: 'w' });
+  return target;
+}
