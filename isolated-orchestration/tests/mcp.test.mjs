@@ -5,10 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { init, add } from '../src/workspace.mjs';
 
 async function session(role, root, task) {
-  const proc = spawn(process.execPath, [new URL('../src/mcp.mjs', import.meta.url).pathname, '--role', role, '--workspace', root, ...(task ? ['--task', task] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, [fileURLToPath(new URL('../src/mcp.mjs', import.meta.url)), '--role', role, '--workspace', root, ...(task ? ['--task', task] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
   let counter = 0;
   const callbacks = new Map();
   createInterface({ input: proc.stdout }).on('line', line => {
