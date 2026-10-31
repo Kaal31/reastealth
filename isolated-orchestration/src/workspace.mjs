@@ -14,25 +14,47 @@ function writeJson(file, value) {
   fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
   fs.renameSync(temp, file);
 }
-// Synchronous cross-process lock: all task-map read/modify/write operations use it.
-// Conservative timeout avoids silently stealing a lock from a live process.
+// Cross-process registry lock with conservative dead-owner recovery.
+// A live owner is never preempted. File writes use atomic replacement.
 const pause = new Int32Array(new SharedArrayBuffer(4));
+function alive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (e) { return e.code === 'EPERM'; }
+}
+function recoverAbandonedLock(lockPath) {
+  let stat;
+  try { stat = fs.statSync(lockPath); }
+  catch { return; }
+  if (Date.now() - stat.mtimeMs < 3000) return;
+  const ownerFile = path.join(lockPath, 'owner.json');
+  let owner;
+  try { owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8')); } catch {}
+  // Without a readable owner, wait a full timeout before recovering.
+  if (!owner && Date.now() - stat.mtimeMs < 15000) return;
+  if (owner && Number.isInteger(owner.pid) && alive(owner.pid)) return;
+  const abandoned = lockPath + '.abandoned-' + crypto.randomUUID();
+  try {
+    fs.renameSync(lockPath, abandoned);
+    fs.rmSync(abandoned, { recursive: true, force: true });
+  } catch (e) { if (e.code !== 'ENOENT' && e.code !== 'EACCES') throw e; }
+}
 function withMapLock(p, action) {
   const lockPath = path.join(p.control, '.task-map.lock');
-  const deadline = Date.now() + 15000;
-  let acquired = false;
-  while (!acquired) {
+  const deadline = Date.now() + 20000;
+  while (true) {
     try {
       fs.mkdirSync(lockPath);
-      acquired = true;
+      fs.writeFileSync(path.join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), { flag: 'wx' });
+      break;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      if (Date.now() > deadline) throw new Error('Task registry busy; lock timeout: ' + lockPath);
-      Atomics.wait(pause, 0, 0, 20);
+      recoverAbandonedLock(lockPath);
+      if (Date.now() >= deadline) throw new Error('Task registry busy; lock timeout: ' + lockPath);
+      Atomics.wait(pause, 0, 0, 25);
     }
   }
   try { return action(); }
-  finally { fs.rmdirSync(lockPath); }
+  finally { fs.rmSync(lockPath, { recursive: true, force: true }); }
 }
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const paths = root => {
