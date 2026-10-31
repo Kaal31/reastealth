@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const idPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 function taskId(id) {
@@ -69,6 +70,33 @@ export function add(root, spec) {
   fs.mkdirSync(path.join(dir, 'deliverables'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'TASK.md'), '# ' + spec.title + '\n\n' + spec.instructions + '\n\n## Acceptance criteria\n' + (spec.acceptance ?? []).map(x => '- ' + x).join('\n') + '\n');
   writeJson(path.join(dir, 'task.json'), { id, title: spec.title, dependencies: deps, status: 'pending' });
+  // Independent Claude Code project: no master plan, sibling source, or global task map.
+  // This configuration is advisory isolation until Windows account/NTFS enforcement.
+  const mcpEntry = fileURLToPath(new URL('./mcp.mjs', import.meta.url));
+  writeJson(path.join(dir, '.mcp.json'), {
+    mcpServers: {
+      'rea-worker': {
+        type: 'stdio',
+        command: process.execPath,
+        args: [mcpEntry, '--role', 'worker', '--workspace', p.root, '--task', id]
+      }
+    }
+  });
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+  writeJson(path.join(dir, '.claude', 'settings.json'), {
+    autoMemoryEnabled: false,
+    enableAllProjectMcpServers: false
+  });
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), [
+    '# Assigned worker project',
+    'Only implement the task described in TASK.md inside this project folder.',
+    'Do not inspect parent directories, sibling projects, or other repositories.',
+    'Use the rea-worker MCP for dependency requests, status, and completion.',
+    'Save implementation files under deliverables/. Do not mark work complete until tests pass.',
+    'Report external dependencies and missing interfaces to the orchestrator through request_dependency.',
+    ''
+  ].join('\\n'));
+
   map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
   writeJson(mapFile(p), map);
   return dir;
