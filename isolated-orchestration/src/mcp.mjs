@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import { claimTask, renewTask, releaseTask, recoverExpired, makeWorkerIdentity } from './coordination.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { init, add, list, ready, submit, review, workerRead, workerWrite, requestDependency, listDependencyRequests, resolveDependencyRequest } from './workspace.mjs';
+import { init, add, list, ready, submit, review, workerRead, workerWrite, requestDependency, listDependencyRequests, resolveDependencyRequest, pendingEvents, acknowledgeEvent } from './workspace.mjs';
 
 const args = process.argv.slice(2);
 const option = key => { const i = args.indexOf('--' + key); return i >= 0 ? args[i + 1] : undefined; };
@@ -26,6 +26,8 @@ const tools = {
   master: [
     ['init_workspace', 'Initialize a new empty workspace', { type: 'object', properties: {} }, () => init(root)],
     ['recover_expired', 'Return expired worker assignments to the queue', { type: 'object', properties: {} }, () => recoverExpired(root)],
+    ['pending_events', 'Read durable worker submission events', { type: 'object', properties: {} }, () => pendingEvents(root)],
+    ['acknowledge_event', 'Acknowledge a processed submission event', { type: 'object', properties: { id: str }, required: ['id'] }, a => acknowledgeEvent(root, a.id)],
     ['list_tasks', 'Show all tasks and statuses', { type: 'object', properties: {} }, () => list(root)],
     ['ready_tasks', 'Show tasks whose dependencies are accepted', { type: 'object', properties: {} }, () => ready(root)],
     ['create_task', 'Create an isolated project task', { type: 'object', properties: { id: str, title: str, instructions: str, dependencies: { type: 'array', items: str }, acceptance: { type: 'array', items: str } }, required: ['id', 'title', 'instructions'] }, a => ({ directory: add(root, a) })],
