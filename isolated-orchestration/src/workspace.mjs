@@ -77,7 +77,7 @@ export function submit(root, id, summary = '') {
   const p = paths(root);
   return withMapLock(p, () => {
   const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
-  if (!task || task.status !== 'pending' || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
+  if (!task || task.status !== 'pending' || (map.dependencyRequests ?? []).some(r => r.taskId === id && r.required && r.status !== 'provisioned') || !task.dependencies.every(d => map.tasks.some(t => t.id === d && t.status === 'accepted'))) throw new Error('Task not ready');
   task.status = 'submitted';
   writeJson(path.join(p.results, id + '.json'), { id, summary, submittedAt: new Date().toISOString() });
   writeJson(mapFile(p), map);
@@ -85,12 +85,62 @@ export function submit(root, id, summary = '') {
   });
 }
 export function review(root, id, accepted, notes = '') {
-  const p = paths(root), map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
-  if (!task || task.status !== 'submitted') throw new Error('Task not submitted');
-  task.status = accepted ? 'accepted' : 'pending';
-  writeJson(path.join(p.results, id + '-review.json'), { id, accepted: !!accepted, notes, reviewedAt: new Date().toISOString() });
-  writeJson(mapFile(p), map);
-  return task;
+  const p = paths(root);
+  return withMapLock(p, () => {
+    const map = readJson(mapFile(p)), task = map.tasks.find(t => t.id === taskId(id));
+    if (!task || task.status !== 'submitted') throw new Error('Task not submitted');
+    task.status = accepted ? 'accepted' : 'pending';
+    writeJson(path.join(p.results, id + '-review.json'), { id, accepted: !!accepted, notes, reviewedAt: new Date().toISOString() });
+    writeJson(mapFile(p), map);
+    return task;
+  });
+}
+
+const requestTypes = new Set(['package', 'tool', 'documentation', 'interface', 'fixture', 'network', 'subtask', 'other']);
+const requestStatuses = new Set(['approved', 'rejected', 'needs_clarification', 'provisioned']);
+export function requestDependency(root, id, spec) {
+  const p = paths(root);
+  return withMapLock(p, () => {
+    const map = readJson(mapFile(p));
+    const task = map.tasks.find(t => t.id === taskId(id));
+    if (!task || !['pending', 'blocked'].includes(task.status)) throw new Error('Task not accepting requests');
+    if (!spec || !requestTypes.has(spec.type) || typeof spec.name !== 'string' || !spec.name.trim() ||
+        typeof spec.reason !== 'string' || !spec.reason.trim()) throw new Error('Invalid dependency request');
+    const request = {
+      id: crypto.randomUUID(), taskId: id, type: spec.type, name: spec.name.slice(0, 256),
+      reason: spec.reason.slice(0, 4000), required: spec.required !== false,
+      status: 'pending', response: '', createdAt: new Date().toISOString()
+    };
+    map.dependencyRequests ??= [];
+    map.dependencyRequests.push(request);
+    if (request.required) task.status = 'blocked';
+    writeJson(mapFile(p), map);
+    return request;
+  });
+}
+export function listDependencyRequests(root, task = undefined) {
+  const map = readJson(mapFile(paths(root)));
+  if (task !== undefined) taskId(task);
+  return (map.dependencyRequests ?? []).filter(r => task === undefined || r.taskId === task);
+}
+export function resolveDependencyRequest(root, requestId, status, response = '') {
+  if (typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(requestId) || !requestStatuses.has(status)) throw new Error('Invalid resolution');
+  const p = paths(root);
+  return withMapLock(p, () => {
+    const map = readJson(mapFile(p));
+    const r = (map.dependencyRequests ?? []).find(x => x.id === requestId);
+    if (!r || !['pending', 'needs_clarification', 'approved'].includes(r.status)) throw new Error('Request cannot be resolved');
+    if (status === 'provisioned' && r.status !== 'approved') throw new Error('Approve before provisioning');
+    r.status = status;
+    r.response = String(response).slice(0, 4000);
+    r.updatedAt = new Date().toISOString();
+    const task = map.tasks.find(t => t.id === r.taskId);
+    // Only provisioned or rejected required requests unblock; rejection leaves an explanation for the worker.
+    // A rejected request is NOT considered satisfied: worker must revise or submit a new request.
+    if (task?.status === 'blocked' && !(map.dependencyRequests ?? []).some(x =>
+      x.taskId === task.id && x.required && !['provisioned'].includes(x.status))) task.status = 'pending';
+    writeJson(mapFile(p), map);
+    return r;
   });
 }
 // Validates a path for bridge-mediated access. Does not restrict an untrusted desktop process.
