@@ -195,7 +195,7 @@ export function requestDependency(root, id, spec, leaseOwner = undefined) {
     };
     map.dependencyRequests ??= [];
     map.dependencyRequests.push(request);
-    if (request.required) task.status = 'blocked';
+    if (request.required) { task.previousStatus = task.status; task.status = 'blocked'; }
     writeJson(mapFile(p), map);
     return request;
   });
@@ -220,7 +220,11 @@ export function resolveDependencyRequest(root, requestId, status, response = '')
     // Only provisioned or rejected required requests unblock; rejection leaves an explanation for the worker.
     // A rejected request is NOT considered satisfied: worker must revise or submit a new request.
     if (task?.status === 'blocked' && !(map.dependencyRequests ?? []).some(x =>
-      x.taskId === task.id && x.required && !['provisioned'].includes(x.status))) task.status = 'pending';
+      x.taskId === task.id && x.required && x.status !== 'provisioned')) {
+      task.status = task.previousStatus === 'assigned' && task.lease && Date.parse(task.lease.expiresAt) > Date.now() ? 'assigned' : 'pending';
+      delete task.previousStatus;
+      if (task.status !== 'assigned') delete task.lease;
+    }
     writeJson(mapFile(p), map);
     return r;
   });
