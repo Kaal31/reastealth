@@ -2,6 +2,7 @@
 // Standalone MCP stdio endpoint: one implementation, master/worker tool profiles.
 // stdout is reserved for JSON-RPC. No external model API or server dependencies.
 import { createInterface } from 'node:readline';
+import { collectCompleted } from './completion.mjs';
 import { planWorkers, startWorkers } from './launcher.mjs';
 import { createFragments } from './fragmentation.mjs';
 import { claimTask, renewTask, releaseTask, recoverExpired, makeWorkerIdentity } from './coordination.mjs';
@@ -47,6 +48,7 @@ if (role === 'worker' && (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(task) || !fs.
 const str = { type: 'string' };
 const tools = {
   master: [
+    ['collect_completed', 'Collect finished worker deliverables from explicit ready markers; review still required', { type:'object', properties:{} }, () => collectCompleted(root)],
     ['create_fragments', 'Preview or create file-scoped worker tasks from a Codex-authored fragment manifest and local source directory', { type:'object', properties:{ source:str, tasks:{type:'array',items:{type:'object'}}, execute:{type:'boolean'} }, required:['source','tasks'] }, a => createFragments(root,a.source,{tasks:a.tasks},{dryRun:a.execute!==true})],
     ['plan_worker_launch', 'Preview ready Claude Code worker terminal launches without executing them', { type: 'object', properties: { max: { type: 'integer', minimum: 1, maximum: 16 } } }, a => planWorkers(root, a.max ?? 4)],
     ['launch_ready_workers', 'Open interactive Claude Code terminals for ready tasks only after confirmation; does not bypass permissions', { type: 'object', properties: { confirm: { type: 'boolean' }, autoStart: { type: 'boolean' }, max: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['confirm'] }, a => { if (a.confirm !== true) throw Error('Explicit confirm=true required'); return startWorkers(planWorkers(root, a.max ?? 4), { autoStart: a.autoStart === true }); }],
