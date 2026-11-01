@@ -113,8 +113,7 @@ node src/cli.mjs launch-ready C:/Users/levmi/REA-test-project --max=2 --execute
 In each new Claude Code terminal, verify its project MCP with `/mcp` and ask:
 "Use rea-worker get_task to claim this project, complete TASK.md and submit
 your work." Each process gets an exclusive lease after calling `get_task`.
-Use `renew_lease` periodically for long interactive sessions; the default
-lease expires after two minutes, and no automatic heartbeat exists yet.
+The MCP server now renews its two-minute lease automatically every 45 seconds after `get_task` succeeds, including while waiting for a required dependency. `release_task` and `submit_result` stop that heartbeat. If the MCP server exits, the lease expires normally.
 
 Master MCP tools: `plan_worker_launch` previews eligible sessions, and
 `launch_ready_workers` requires `{ "confirm": true }` to open them.
@@ -125,3 +124,13 @@ On Linux, the launcher currently requires `x-terminal-emulator`; macOS is
 not yet supported. A Claude Code subscription or user-provided model
 authentication is still required for real model execution. These terminal
 launches do not require REA Stealth to collect or store provider credentials.
+
+### Automatic initial prompt (opt-in)
+
+```powershell
+node src/cli.mjs launch-ready C:/Users/levmi/REA-test-project --max=2 --execute --auto-start
+```
+
+The launcher passes a task-specific *generic* startup instruction to each visible Claude Code terminal, prompting it to call `rea-worker.get_task`, implement the task, and submit the result. No API keys or permission-bypass flags are supplied, and it cannot guarantee Claude Code finishes unattended. Master MCP supports `launch_ready_workers` with `{ "confirm": true, "autoStart": true }`.
+
+The heartbeat works only while the task's MCP server process remains alive; it does not itself restart crashed Claude Code sessions. Automatic startup has not yet been tested with a real Claude Code installation.
