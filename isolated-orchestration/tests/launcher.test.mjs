@@ -42,3 +42,23 @@ test('launcher rejects invalid limits and never silently claims a task', () => {
  assert.throws(()=>planWorkers(root,17));
  assert.deepEqual(planWorkers(root).map(t=>t.id),['parser','ui']);
 });
+
+test('automatic startup prompt is opt-in and confined to worker launch arguments', () => {
+ const root=project();
+ const calls=[];
+ startWorkers(planWorkers(root,1), { platform:'win32',autoStart:true,run:(command,args)=>{
+  calls.push({command,args});
+  return {status:0,stderr:''};
+ }});
+ const script=Buffer.from(calls[0].args[3],'base64').toString('utf16le');
+ assert.match(script,/get_task/);
+ assert.match(script,/submit_result/);
+ assert.match(script,/Start-Process/);
+ assert.doesNotMatch(script,/dangerously-skip-permissions/);
+ const unprompted=[];
+ startWorkers(planWorkers(root,1),{platform:'win32',run:(cmd,args)=>{
+  unprompted.push(Buffer.from(args[3],'base64').toString('utf16le'));
+  return {status:0,stderr:''};
+ }});
+ assert.doesNotMatch(unprompted[0],/get_task/);
+});
