@@ -2,6 +2,8 @@
 // Standalone MCP stdio endpoint: one implementation, master/worker tool profiles.
 // stdout is reserved for JSON-RPC. No external model API or server dependencies.
 import { createInterface } from 'node:readline';
+import { setControllerMode, controllerStatus, pollController } from './controller.mjs';
+import { inspectSandbox, launchSandboxedWorker } from './windows-sandbox.mjs';
 import { collectCompleted } from './completion.mjs';
 import { planWorkers, startWorkers } from './launcher.mjs';
 import { createFragments } from './fragmentation.mjs';
@@ -48,6 +50,13 @@ if (role === 'worker' && (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(task) || !fs.
 const str = { type: 'string' };
 const tools = {
   master: [
+    ['controller_status', 'Read persisted run status, ready tasks and pending events', {type:'object',properties:{}}, () => controllerStatus(root)],
+    ['controller_start', 'Enable controller polling (a separate controller-run process must be started)', {type:'object',properties:{}}, () => setControllerMode(root,'running')],
+    ['controller_pause', 'Pause collection, preserving task state', {type:'object',properties:{}}, () => setControllerMode(root,'paused')],
+    ['controller_stop', 'Stop collection, preserving task state', {type:'object',properties:{}}, () => setControllerMode(root,'stopped')],
+    ['controller_poll', 'Collect completed worker markers only if controller is running', {type:'object',properties:{}}, () => pollController(root)],
+    ['sandbox_check', 'Report whether enforced Windows worker isolation is actually available', {type:'object',properties:{id:str},required:['id']}, a => inspectSandbox(root,a.id)],
+    ['sandbox_launch', 'Fail closed until Windows sandbox enforcement is implemented and validated', {type:'object',properties:{id:str},required:['id']}, () => launchSandboxedWorker()],
     ['collect_completed', 'Collect finished worker deliverables from explicit ready markers; review still required', { type:'object', properties:{} }, () => collectCompleted(root)],
     ['create_fragments', 'Preview or create file-scoped worker tasks from a Codex-authored fragment manifest and local source directory', { type:'object', properties:{ source:str, tasks:{type:'array',items:{type:'object'}}, execute:{type:'boolean'} }, required:['source','tasks'] }, a => createFragments(root,a.source,{tasks:a.tasks},{dryRun:a.execute!==true})],
     ['plan_worker_launch', 'Preview ready Claude Code worker terminal launches without executing them', { type: 'object', properties: { max: { type: 'integer', minimum: 1, maximum: 16 } } }, a => planWorkers(root, a.max ?? 4)],
