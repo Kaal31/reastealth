@@ -204,3 +204,24 @@ node src/cli.mjs watch-completed C:/Users/levmi/REA-fragment-test/workspace
 ```
 
 Alternatively call `collect_completed` on the master MCP or run `node src/cli.mjs collect-completed <workspace>` once. The collector only submits pending tasks; if a task has a live worker lease, it waits until the worker exits and its lease expires (two minutes by default). No daemon is started automatically by the Desktop app. Filesystem permissions remain the user's responsibility, and only explicit completion markers cause collection.
+
+## Persistent controller (initial milestone)
+
+The controller stores a durable status in `control/task-map.json` and polls for completed Goldfish task markers. This first iteration does **not** autonomously run Codex, approve requests, or launch workers.
+
+```powershell
+node src/cli.mjs controller-start C:/Users/levmi/REA-fragment-test/workspace
+node src/cli.mjs controller-run C:/Users/levmi/REA-fragment-test/workspace
+```
+
+Run the background polling process in a separate terminal. In another terminal use `controller-status`, `controller-pause`, `controller-start` to resume, or `controller-stop`. The run process observes these persisted mode changes. Closing that process stops polling, but does not erase state; restart `controller-run` to continue.
+
+Master MCP exposes `controller_start`, `controller_pause`, `controller_stop`, `controller_status`, `controller_poll`, and `sandbox_check`.
+
+### Sandbox safety gate
+
+The intended Windows restricted-process sandbox backend is **not yet implemented**. `sandbox_check` currently reports `enforced:false`, and `sandbox_launch` always refuses execution. The preexisting `launch_ready_workers` and CLI `launch-ready` commands remain **unsandboxed legacy/manual launch options**; do not use them as evidence of isolation.
+
+Before enabling sandboxed launch, implement a native Windows restricted identity/token, correct ACL policy for master and sibling files, a broker for coordination (worker must not open the master registry), process-tree restrictions and scoped network permissions, then test actual read/write denial on Windows. The current task-specific `.mcp.json` includes a master workspace path and therefore must be replaced with a broker endpoint before a restricted worker is launched.
+
+The controller has no independent AI decision-making capabilities. Codex must evaluate dependency requests and review results when its session is active.
