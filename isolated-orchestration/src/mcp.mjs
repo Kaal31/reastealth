@@ -47,7 +47,7 @@ const str = { type: 'string' };
 const tools = {
   master: [
     ['plan_worker_launch', 'Preview ready Claude Code worker terminal launches without executing them', { type: 'object', properties: { max: { type: 'integer', minimum: 1, maximum: 16 } } }, a => planWorkers(root, a.max ?? 4)],
-    ['launch_ready_workers', 'Open interactive Claude Code terminals for ready tasks only after confirmation; does not bypass permissions', { type: 'object', properties: { confirm: { type: 'boolean' }, max: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['confirm'] }, a => { if (a.confirm !== true) throw Error('Explicit confirm=true required'); return startWorkers(planWorkers(root, a.max ?? 4)); }],
+    ['launch_ready_workers', 'Open interactive Claude Code terminals for ready tasks only after confirmation; does not bypass permissions', { type: 'object', properties: { confirm: { type: 'boolean' }, autoStart: { type: 'boolean' }, max: { type: 'integer', minimum: 1, maximum: 16 } }, required: ['confirm'] }, a => { if (a.confirm !== true) throw Error('Explicit confirm=true required'); return startWorkers(planWorkers(root, a.max ?? 4), { autoStart: a.autoStart === true }); }],
     ['init_workspace', 'Initialize a new empty workspace', { type: 'object', properties: {} }, () => init(root)],
     ['recover_expired', 'Return expired worker assignments to the queue', { type: 'object', properties: {} }, () => recoverExpired(root)],
     ['pending_events', 'Read durable worker submission events', { type: 'object', properties: {} }, () => pendingEvents(root)],
