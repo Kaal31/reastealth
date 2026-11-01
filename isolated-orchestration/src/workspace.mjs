@@ -142,6 +142,7 @@ export function add(root, spec) {
     'Do not inspect parent directories, sibling projects, or other repositories.',
     'Use the rea-worker MCP for dependency requests, status, and completion.',
     'Save implementation files under deliverables/. Do not mark work complete until tests pass.',
+    'When finished and verified, write deliverables/READY_FOR_REVIEW.json as the FINAL operation, with JSON: {"complete":true,"summary":"What you completed and tested"}. The master collects automatically; submit_result is optional.',
     'Report external dependencies and missing interfaces to the orchestrator through request_dependency.',
     ''
   ].join('\n'));
