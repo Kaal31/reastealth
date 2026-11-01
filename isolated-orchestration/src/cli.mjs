@@ -14,7 +14,7 @@ try {
       const execute = args.includes('--execute');
       const limit = args.find(x => x.startsWith('--max='));
       const plan = planWorkers(root, limit ? Number(limit.slice(6)) : 4);
-      out(execute ? startWorkers(plan) : { dryRun: true, workers: plan, hint: 'Add --execute to launch interactive Claude Code terminals' });
+      out(execute ? startWorkers(plan, { autoStart: args.includes('--auto-start') }) : { dryRun: true, workers: plan, hint: 'Add --execute to launch interactive Claude Code terminals' });
       break;
     }
     case 'init': out(init(root)); break;
