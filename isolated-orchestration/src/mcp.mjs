@@ -15,6 +15,26 @@ const role = option('role');
 const root = option('workspace');
 const task = option('task');
 const sessionOwner = makeWorkerIdentity();
+let leaseHeartbeat;
+const heartbeatInterval = Number(process.env.REA_LEASE_HEARTBEAT_MS ?? 45000);
+function stopHeartbeat() {
+  if (leaseHeartbeat) clearInterval(leaseHeartbeat);
+  leaseHeartbeat = undefined;
+}
+function startHeartbeat() {
+  if (role !== 'worker' || leaseHeartbeat) return;
+  if (!Number.isInteger(heartbeatInterval) || heartbeatInterval < 50 || heartbeatInterval > 60000)
+    throw Error('Invalid heartbeat interval');
+  leaseHeartbeat = setInterval(() => {
+    try { renewTask(root, task, sessionOwner); }
+    catch (error) {
+      stopHeartbeat();
+      console.error('Worker lease heartbeat stopped: ' + error.message);
+    }
+  }, heartbeatInterval);
+  leaseHeartbeat.unref();
+}
+process.once('exit', stopHeartbeat);
 if (!['master', 'worker'].includes(role) || !root || (role === 'worker' && !task)) {
   console.error('Usage: node src/mcp.mjs --role master|worker --workspace PATH [--task TASK_ID]');
   process.exit(2);
@@ -76,6 +96,8 @@ rl.on('line', line => {
       if (!a || typeof a !== 'object' || Array.isArray(a)) throw Error('Expected object arguments');
       for (const key of entry.inputSchema.required ?? []) if (!(key in a)) throw Error('Missing required argument: ' + key);
       const result = entry.fn(a);
+      if (role === 'worker' && entry.name === 'get_task') startHeartbeat();
+      if (role === 'worker' && ['release_task', 'submit_result'].includes(entry.name)) stopHeartbeat();
       respond({ id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } });
     } else error(id, -32601, 'Method not found');
   } catch (e) { respond({ id, result: { isError: true, content: [{ type: 'text', text: e.message }] } }); }
