@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { collectCompleted, watchCompleted } from './completion.mjs';
 import { createFragments } from './fragmentation.mjs';
 import { planWorkers, startWorkers } from './launcher.mjs';
 import { claimTask, releaseTask, renewTask, recoverExpired } from './coordination.mjs';
@@ -23,6 +24,10 @@ try {
       out(createFragments(root, args[0], JSON.parse(fs.readFileSync(args[1], 'utf8')), {dryRun: !args.includes('--execute')}));
       break;
     }
+    case 'collect-completed': out(collectCompleted(root)); break;
+    case 'watch-completed':
+      watchCompleted(root, event => out(event));
+      break;
     case 'init': out(init(root)); break;
     case 'add': out(add(root, JSON.parse(fs.readFileSync(args[0], 'utf8')))); break;
     case 'list': out(list(root)); break;
