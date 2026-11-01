@@ -117,7 +117,28 @@ export function add(root, spec) {
   const dir = workerDir(p, id);
   if (fs.existsSync(dir)) throw new Error('Task directory already exists');
   fs.mkdirSync(path.join(dir, 'deliverables'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'TASK.md'), '# ' + spec.title + '\n\n' + spec.instructions + '\n\n## Acceptance criteria\n' + (spec.acceptance ?? []).map(x => '- ' + x).join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'TASK.md'), [
+    '# ' + spec.title,
+    '',
+    '## Assignment',
+    spec.instructions,
+    '',
+    '## Workspace boundaries',
+    '- This directory is your entire assigned workspace. Do not inspect or modify parent folders, siblings, other repositories, or the master project.',
+    '- Use only inputs/ and explicitly provisioned resources/ as source material. Treat them as read-only.',
+    '- Write all deliverables under deliverables/. Do not write outside this worker directory.',
+    '- No network access, package installation, external tools, or new agents unless the orchestrator explicitly authorizes the dependency.',
+    '- Do not broaden the assignment or try to infer unrelated project objectives.',
+    '',
+    '## Acceptance criteria',
+    ...(spec.acceptance ?? []).map(x => '- ' + x),
+    '',
+    '## Completion',
+    '- Validate the supplied acceptance criteria and record any limitations.',
+    '- Finish by creating deliverables/READY_FOR_REVIEW.json with {"complete":true,"summary":"..."} as the final operation.',
+    '- Stop after completion. The master reviews and integrates the work.',
+    ''
+  ].join('\\n'));
   writeJson(path.join(dir, 'task.json'), { id, title: spec.title, dependencies: deps, status: 'pending' });
   // Independent Claude Code project: no master plan, sibling source, or global task map.
   // This configuration is advisory isolation until Windows account/NTFS enforcement.
@@ -137,15 +158,35 @@ export function add(root, spec) {
     enableAllProjectMcpServers: false
   });
   fs.writeFileSync(path.join(dir, 'CLAUDE.md'), [
-    '# Assigned worker project',
-    'Only implement the task described in TASK.md inside this project folder.',
-    'Do not inspect parent directories, sibling projects, or other repositories.',
-    'Use the rea-worker MCP for dependency requests, status, and completion.',
-    'Save implementation files under deliverables/. Do not mark work complete until tests pass.',
-    'When finished and verified, write deliverables/READY_FOR_REVIEW.json as the FINAL operation, with JSON: {"complete":true,"summary":"What you completed and tested"}. The master collects automatically; submit_result is optional.',
-    'Report external dependencies and missing interfaces to the orchestrator through request_dependency.',
+    '# Goldfish worker policy',
+    '',
+    'You are a fresh, independent, single-task execution agent. The master owns overall project planning and integration.',
+    '',
+    '## Scope and context',
+    '- Read TASK.md and follow its single assignment only.',
+    '- Stay within this assigned project directory. Never inspect parent directories, siblings, the master workspace, or unrelated repositories.',
+    '- Read only supplied inputs/ and approved resources/ for task context. Do not explore the wider project.',
+    '- Do not infer, reconstruct, or investigate the overall application beyond what is required for the assigned task.',
+    '- Treat inputs/ and resources/ as read-only; save new files only inside deliverables/.',
+    '- Do not access the network, install dependencies, or invoke unrelated external tools without orchestrator approval.',
+    '',
+    '## Execution and delegation',
+    '- Work independently. Do not create subagents, start other workers, or delegate the task.',
+    '- Do not reuse prior conversations or import outside task context.',
+    '- Never expand your assignment without approval. If information is missing, use rea-worker.request_dependency when available or write deliverables/BLOCKER.md.',
+    '- No original REA analysis MCP is part of this worker assignment; do not attempt to discover or connect it.',
+    '- Use rea-worker MCP only for task claiming, status, requests, and optional submission if it is connected.',
+    '',
+    '## Completion',
+    '- Test or validate against TASK.md acceptance criteria and report uncertainty accurately.',
+    '- Save outputs only in deliverables/. Do not edit the source inputs.',
+    '- When fully finished, create deliverables/READY_FOR_REVIEW.json as the FINAL filesystem operation with JSON: {"complete":true,"summary":"What was completed and validated"}. The master-side collector handles submission.',
+    '- Do not mark work complete when unresolved requirements remain. Report blockers instead.',
+    '- Stop after completion; the next fragment belongs to a fresh session.',
+    '',
+    'These project rules guide agent behavior; they are not a filesystem or network security boundary.',
     ''
-  ].join('\n'));
+  ].join('\\n'));
 
   map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
   writeJson(mapFile(p), map);
