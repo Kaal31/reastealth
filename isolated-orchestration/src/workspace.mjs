@@ -138,7 +138,7 @@ export function add(root, spec) {
     '- Finish by creating deliverables/READY_FOR_REVIEW.json with {"complete":true,"summary":"..."} as the final operation.',
     '- Stop after completion. The master reviews and integrates the work.',
     ''
-  ].join('\\n'));
+  ].join('\n'));
   writeJson(path.join(dir, 'task.json'), { id, title: spec.title, dependencies: deps, status: 'pending' });
   // Independent Claude Code project: no master plan, sibling source, or global task map.
   // This configuration is advisory isolation until Windows account/NTFS enforcement.
@@ -186,7 +186,7 @@ export function add(root, spec) {
     '',
     'These project rules guide agent behavior; they are not a filesystem or network security boundary.',
     ''
-  ].join('\\n'));
+  ].join('\n'));
 
   map.tasks.push({ id, title: spec.title, dependencies: deps, status: 'pending' });
   writeJson(mapFile(p), map);
