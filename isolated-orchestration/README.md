@@ -188,3 +188,19 @@ the manifest using its own analysis. This is not an operating-system security
 sandbox and does not prevent Claude Code from reading other locations that its
 Windows user account can access. Keep sensitive files outside the supplied
 source root and use OS restrictions when hard isolation is required.
+
+## File-based completion (no worker MCP submission required)
+
+Each worker may finish by writing deliverables under its own task directory and then **as its last operation** creating `deliverables/READY_FOR_REVIEW.json`:
+
+```json
+{ "complete": true, "summary": "Completed and tested the assigned fragment" }
+```
+
+The master-side collector discovers those markers and records the usual durable `task_submitted` event. It **does not automatically accept or import** the work. To run the collector continuously, open a separate PowerShell terminal:
+
+```powershell
+node src/cli.mjs watch-completed C:/Users/levmi/REA-fragment-test/workspace
+```
+
+Alternatively call `collect_completed` on the master MCP or run `node src/cli.mjs collect-completed <workspace>` once. The collector only submits pending tasks; if a task has a live worker lease, it waits until the worker exits and its lease expires (two minutes by default). No daemon is started automatically by the Desktop app. Filesystem permissions remain the user's responsibility, and only explicit completion markers cause collection.
