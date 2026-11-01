@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { setControllerMode, controllerStatus, pollController, runController } from './controller.mjs';
+import { inspectSandbox, launchSandboxedWorker } from './windows-sandbox.mjs';
 import { collectCompleted, watchCompleted } from './completion.mjs';
 import { createFragments } from './fragmentation.mjs';
 import { planWorkers, startWorkers } from './launcher.mjs';
@@ -12,6 +14,14 @@ const out = value => console.log(typeof value === 'string' ? value : JSON.string
 try {
   if (!command || !root) throw new Error('Usage: node src/cli.mjs <init|add|list|ready|submit|review|worker-read|worker-write> <workspace> [...args]');
   switch (command) {
+    case 'controller-status': out(controllerStatus(root)); break;
+    case 'controller-start': out(setControllerMode(root,'running')); break;
+    case 'controller-pause': out(setControllerMode(root,'paused')); break;
+    case 'controller-stop': out(setControllerMode(root,'stopped')); break;
+    case 'controller-poll': out(pollController(root)); break;
+    case 'controller-run': runController(root,{onEvent:out}); break;
+    case 'sandbox-check': out(inspectSandbox(root,args[0])); break;
+    case 'sandbox-launch': out(launchSandboxedWorker()); break;
     case 'launch-ready': {
       const execute = args.includes('--execute');
       const limit = args.find(x => x.startsWith('--max='));
