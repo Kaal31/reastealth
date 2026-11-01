@@ -18,21 +18,25 @@ export function planWorkers(root, max = 4) {
     return { id: task.id, title: task.title, directory };
   });
 }
+export const workerStartupPrompt = 'Use the rea-worker MCP get_task tool to claim your assigned task. Follow TASK.md, use request_dependency for missing resources, save work under deliverables/, and call submit_result only after validating the result. Do not inspect other projects.';
 const ps = value => "'" + value.replaceAll("'", "''") + "'";
-export function startWorkers(plan, { platform = process.platform, run = spawnSync } = {}) {
+export function startWorkers(plan, { platform = process.platform, run = spawnSync, autoStart = false } = {}) {
   const results = [];
   for (const worker of plan) {
     let command, args;
     if (platform === 'win32') {
       // Start-Process creates an independent, visible terminal, with CWD assigned to one task.
       // Encode the PowerShell command to protect spaces and special characters in paths.
+      const inner = autoStart
+        ? 'claude ' + ps(workerStartupPrompt)
+        : 'claude';
       const script = 'Start-Process -FilePath powershell.exe -WorkingDirectory ' +
-        ps(worker.directory) + ' -ArgumentList @("-NoExit","-Command","claude")';
+        ps(worker.directory) + ' -ArgumentList @("-NoExit","-Command",' + ps(inner) + ')';
       command = 'powershell.exe';
       args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
     } else if (platform === 'linux') {
       command = 'x-terminal-emulator';
-      args = ['--working-directory=' + worker.directory, '-e', 'claude'];
+      args = ['--working-directory=' + worker.directory, '-e', 'claude', ...(autoStart ? [workerStartupPrompt] : [])];
     } else {
       throw Error('Launcher currently supports Windows and Linux x-terminal-emulator only');
     }
