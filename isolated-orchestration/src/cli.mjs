@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { createFragments } from './fragmentation.mjs';
 import { planWorkers, startWorkers } from './launcher.mjs';
 import { claimTask, releaseTask, renewTask, recoverExpired } from './coordination.mjs';
 import { provisionTextResource, inspectDeliverables, importDeliverables } from './artifacts.mjs';
@@ -15,6 +16,11 @@ try {
       const limit = args.find(x => x.startsWith('--max='));
       const plan = planWorkers(root, limit ? Number(limit.slice(6)) : 4);
       out(execute ? startWorkers(plan, { autoStart: args.includes('--auto-start') }) : { dryRun: true, workers: plan, hint: 'Add --execute to launch interactive Claude Code terminals' });
+      break;
+    }
+    case 'fragment': {
+      if (!args[0] || !args[1]) throw Error('Usage: fragment <workspace> <source-dir> <manifest.json> [--execute]');
+      out(createFragments(root, args[0], JSON.parse(fs.readFileSync(args[1], 'utf8')), {dryRun: !args.includes('--execute')}));
       break;
     }
     case 'init': out(init(root)); break;
