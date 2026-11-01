@@ -134,3 +134,57 @@ node src/cli.mjs launch-ready C:/Users/levmi/REA-test-project --max=2 --execute 
 The launcher passes a task-specific *generic* startup instruction to each visible Claude Code terminal, prompting it to call `rea-worker.get_task`, implement the task, and submit the result. No API keys or permission-bypass flags are supplied, and it cannot guarantee Claude Code finishes unattended. Master MCP supports `launch_ready_workers` with `{ "confirm": true, "autoStart": true }`.
 
 The heartbeat works only while the task's MCP server process remains alive; it does not itself restart crashed Claude Code sessions. Automatic startup has not yet been tested with a real Claude Code installation.
+
+## Codex-authored codebase fragmentation
+
+The **master** supplies an explicit fragment manifest after REA investigation.
+Only selected files are copied as read-only *conceptual inputs* (OS write
+permissions are not enforced) into each worker's `inputs/` folder. The worker
+has no REA analysis MCP; its project registers only `rea-worker` for coordination.
+
+Example `fragments.json`:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "analyze-parser",
+      "title": "Analyze parser implementation",
+      "instructions": "Explain edge cases and return a concise report in deliverables/report.md.",
+      "files": ["src/parser.js"],
+      "acceptance": ["Identify failure cases"]
+    },
+    {
+      "id": "test-parser",
+      "title": "Write parser tests",
+      "instructions": "Write tests based on the supplied source and interfaces.",
+      "files": ["tests/parser.spec.js"],
+      "dependencies": ["analyze-parser"]
+    }
+  ]
+}
+```
+
+Run from `isolated-orchestration/` (replace source path with your actual project):
+
+```powershell
+node src/cli.mjs fragment C:/work/rea-workspace C:/work/source C:/work/fragments.json
+node src/cli.mjs fragment C:/work/rea-workspace C:/work/source C:/work/fragments.json --execute
+node src/cli.mjs launch-ready C:/work/rea-workspace --max=2 --execute --auto-start
+```
+
+The first invocation is a **dry run** and creates nothing. The second creates
+separate task workspaces, receipts with file SHA-256 digests, and registers the
+existing dependency graph. Manifest dependency IDs must already exist or appear
+earlier in the manifest. Fragment input limits: 12 files, 256 KiB/file and
+512 KiB/task. File paths are relative to the supplied source directory, with
+traversal and symlink escapes rejected. Only use trusted, local source directories.
+
+The master MCP tool `create_fragments` takes `source`, `tasks`, and
+`execute: true` to actually create workers; default is preview-only.
+
+This does not automatically discover fragments from REA output: Codex authors
+the manifest using its own analysis. This is not an operating-system security
+sandbox and does not prevent Claude Code from reading other locations that its
+Windows user account can access. Keep sensitive files outside the supplied
+source root and use OS restrictions when hard isolation is required.
