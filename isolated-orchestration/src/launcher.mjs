@@ -18,7 +18,7 @@ export function planWorkers(root, max = 4) {
     return { id: task.id, title: task.title, directory };
   });
 }
-export const workerStartupPrompt = 'Use the rea-worker MCP get_task tool to claim your assigned task. Follow TASK.md, use request_dependency for missing resources, save work under deliverables/, and call submit_result only after validating the result. Do not inspect other projects.';
+export const workerStartupPrompt = 'Use the rea-worker MCP get_task tool to claim your assigned task. Follow TASK.md, use request_dependency for missing resources, save work under deliverables/, and write deliverables/READY_FOR_REVIEW.json with complete:true and a summary as the final operation. The master collects results. Do not inspect other projects.';
 const ps = value => "'" + value.replaceAll("'", "''") + "'";
 export function startWorkers(plan, { platform = process.platform, run = spawnSync, autoStart = false } = {}) {
   const results = [];
